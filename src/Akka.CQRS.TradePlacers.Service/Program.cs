@@ -29,16 +29,11 @@ namespace Akka.CQRS.TradePlacers.Service
 
             var actorSystem = ActorSystem.Create("AkkaTrader", conf);
 
-            var tradeRouter = actorSystem.ActorOf(
-                Props.Empty.WithRouter(new ClusterRouterGroup(
-                    new ConsistentHashingGroup(new[] {"/user/orderbooks"},
-                        TradeEventConsistentHashMapping.TradeEventMapping),
-                    new ClusterRouterGroupSettings(10000, new []{ "/user/orderbooks" }, true, useRole:"trade-processor"))), "tradesRouter");
-
             Cluster.Cluster.Get(actorSystem).RegisterOnMemberUp(() =>
             {
-                var shardRegionProxy = tradeRouter;
-                var subManager = new ActorTradeSubscriptionManager(tradeRouter);
+                var sharding = ClusterSharding.Get(actorSystem);
+                var shardRegionProxy = sharding.StartProxy("orderBook", "trade-processor", new StockShardMsgRouter());
+                var subManager = Akka.CQRS.Subscriptions.DistributedPubSub.DistributedPubSubTradeEventSubscriptionManager.For(actorSystem);
                 foreach (var stock in AvailableTickerSymbols.Symbols)
                 {
                     var max = (decimal)ThreadLocalRandom.Current.Next(20, 45);
